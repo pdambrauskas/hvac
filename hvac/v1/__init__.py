@@ -7,14 +7,17 @@ try:
     has_hcl_parser = True
 except ImportError:
     has_hcl_parser = False
-import requests
+import pycurl
 
 from hvac import exceptions
 
 try:
     from urlparse import urljoin
+    from urllib import urlencode
+    from StringIO import StringIO as ResponseIO
 except ImportError:
-    from urllib.parse import urljoin
+    from urllib.parse import urljoin, urlencode
+    from io import BytesIO as ResponseIO
 
 class Client(object):
     def __init__(self, url='http://localhost:8200', token=None,
@@ -22,7 +25,7 @@ class Client(object):
                  allow_redirects=True, session=None):
 
         if not session:
-            session = requests.Session()
+            session = pycurl.Curl()
 
         self.allow_redirects = allow_redirects
         self.session = session
@@ -41,7 +44,7 @@ class Client(object):
         GET /<path>
         """
         try:
-            return self._get('/v1/{0}'.format(path), wrap_ttl=wrap_ttl).json()
+            return self._get('/v1/{0}'.format(path), wrap_ttl=wrap_ttl)
         except exceptions.InvalidPath:
             return None
 
@@ -53,7 +56,7 @@ class Client(object):
             payload = {
                 'list': True
             }
-            return self._get('/v1/{0}'.format(path), params=payload).json()
+            return self._get('/v1/{0}'.format(path), params=payload)
         except exceptions.InvalidPath:
             return None
 
@@ -63,8 +66,7 @@ class Client(object):
         """
         response = self._put('/v1/{0}'.format(path), json=kwargs, wrap_ttl=wrap_ttl)
 
-        if response.status_code == 200:
-            return response.json()
+        return response
 
     def delete(self, path):
         """
@@ -80,7 +82,7 @@ class Client(object):
         _token = self.token
         try:
             self.token = token
-            return self._post('/v1/sys/wrapping/unwrap').json()
+            return self._post('/v1/sys/wrapping/unwrap')
         finally:
             self.token = _token
 
@@ -88,7 +90,7 @@ class Client(object):
         """
         GET /sys/init
         """
-        return self._get('/v1/sys/init').json()['initialized']
+        return self._get('/v1/sys/init')['initialized']
 
     def initialize(self, secret_shares=5, secret_threshold=3, pgp_keys=None):
         """
@@ -105,14 +107,14 @@ class Client(object):
 
             params['pgp_keys'] = pgp_keys
 
-        return self._put('/v1/sys/init', json=params).json()
+        return self._put('/v1/sys/init', json=params)
 
     @property
     def seal_status(self):
         """
         GET /sys/seal-status
         """
-        return self._get('/v1/sys/seal-status').json()
+        return self._get('/v1/sys/seal-status')
 
     def is_sealed(self):
         return self.seal_status['sealed']
@@ -130,7 +132,7 @@ class Client(object):
         params = {
             'reset': True,
         }
-        return self._put('/v1/sys/unseal', json=params).json()
+        return self._put('/v1/sys/unseal', json=params)
 
     def unseal(self, key):
         """
@@ -140,7 +142,7 @@ class Client(object):
             'key': key,
         }
 
-        return self._put('/v1/sys/unseal', json=params).json()
+        return self._put('/v1/sys/unseal', json=params)
 
     def unseal_multi(self, keys):
         result = None
@@ -157,7 +159,7 @@ class Client(object):
         """
         GET /sys/key-status
         """
-        return self._get('/v1/sys/key-status').json()
+        return self._get('/v1/sys/key-status')
 
     def rotate(self):
         """
@@ -170,7 +172,7 @@ class Client(object):
         """
         GET /sys/rekey/init
         """
-        return self._get('/v1/sys/rekey/init').json()
+        return self._get('/v1/sys/rekey/init')
 
     def start_rekey(self, secret_shares=5, secret_threshold=3, pgp_keys=None,
                     backup=False):
@@ -190,8 +192,7 @@ class Client(object):
             params['backup'] = backup
 
         resp = self._put('/v1/sys/rekey/init', json=params)
-        if resp.text:
-            return resp.json()
+        return resp
 
     def cancel_rekey(self):
         """
@@ -210,7 +211,7 @@ class Client(object):
         if nonce:
             params['nonce'] = nonce
 
-        return self._put('/v1/sys/rekey/update', json=params).json()
+        return self._put('/v1/sys/rekey/update', json=params)
 
     def rekey_multi(self, keys, nonce=None):
         result = None
@@ -226,14 +227,14 @@ class Client(object):
         """
         GET /sys/rekey/backup
         """
-        return self._get('/v1/sys/rekey/backup').json()
+        return self._get('/v1/sys/rekey/backup')
 
     @property
     def ha_status(self):
         """
         GET /sys/leader
         """
-        return self._get('/v1/sys/leader').json()
+        return self._get('/v1/sys/leader')
 
     def renew_secret(self, lease_id, increment=None):
         """
@@ -242,7 +243,7 @@ class Client(object):
         params = {
             'increment': increment,
         }
-        return self._post('/v1/sys/renew/{0}'.format(lease_id), json=params).json()
+        return self._post('/v1/sys/renew/{0}'.format(lease_id), json=params)
 
     def revoke_secret(self, lease_id):
         """
@@ -266,7 +267,7 @@ class Client(object):
         """
         GET /sys/mounts
         """
-        return self._get('/v1/sys/mounts').json()
+        return self._get('/v1/sys/mounts')
 
     def enable_secret_backend(self, backend_type, description=None, mount_point=None, config=None):
         """
@@ -304,14 +305,14 @@ class Client(object):
         """
         GET /sys/policy
         """
-        return self._get('/v1/sys/policy').json()['policies']
+        return self._get('/v1/sys/policy')['policies']
 
     def get_policy(self, name, parse=False):
         """
         GET /sys/policy/<name>
         """
         try:
-            policy = self._get('/v1/sys/policy/{0}'.format(name)).json()['rules']
+            policy = self._get('/v1/sys/policy/{0}'.format(name))['rules']
             if parse:
                 if not has_hcl_parser:
                     raise ImportError('pyhcl is required for policy parsing')
@@ -346,7 +347,7 @@ class Client(object):
         """
         GET /sys/audit
         """
-        return self._get('/v1/sys/audit').json()
+        return self._get('/v1/sys/audit')
 
     def enable_audit_backend(self, backend_type, description=None, options=None, name=None):
         """
@@ -376,7 +377,7 @@ class Client(object):
         params = {
             'input': input,
         }
-        return self._post('/v1/sys/audit-hash/{0}'.format(name), json=params).json()
+        return self._post('/v1/sys/audit-hash/{0}'.format(name), json=params)
 
     def create_token(self, role=None, id=None, policies=None, meta=None,
                      no_parent=False, lease=None, display_name=None,
@@ -409,11 +410,11 @@ class Client(object):
             params['explicit_max_ttl'] = explicit_max_ttl
 
         if orphan:
-            return self._post('/v1/auth/token/create-orphan', json=params, wrap_ttl=wrap_ttl).json()
+            return self._post('/v1/auth/token/create-orphan', json=params, wrap_ttl=wrap_ttl)
         elif role:
-            return self._post('/v1/auth/token/create/{0}'.format(role), json=params, wrap_ttl=wrap_ttl).json()
+            return self._post('/v1/auth/token/create/{0}'.format(role), json=params, wrap_ttl=wrap_ttl)
         else:
-            return self._post('/v1/auth/token/create', json=params, wrap_ttl=wrap_ttl).json()
+            return self._post('/v1/auth/token/create', json=params, wrap_ttl=wrap_ttl)
 
     def lookup_token(self, token=None, accessor=False, wrap_ttl=None):
         """
@@ -424,11 +425,11 @@ class Client(object):
         if token:
             if accessor:
                 path = '/v1/auth/token/lookup-accessor/{0}'.format(token)
-                return self._post(path, wrap_ttl=wrap_ttl).json()
+                return self._post(path, wrap_ttl=wrap_ttl)
             else:
-                return self._get('/v1/auth/token/lookup/{0}'.format(token)).json()
+                return self._get('/v1/auth/token/lookup/{0}'.format(token))
         else:
-            return self._get('/v1/auth/token/lookup-self', wrap_ttl=wrap_ttl).json()
+            return self._get('/v1/auth/token/lookup-self', wrap_ttl=wrap_ttl)
 
     def revoke_token(self, token, orphan=False, accessor=False):
         """
@@ -463,9 +464,9 @@ class Client(object):
 
         if token:
             path = '/v1/auth/token/renew/{0}'.format(token)
-            return self._post(path, json=params, wrap_ttl=wrap_ttl).json()
+            return self._post(path, json=params, wrap_ttl=wrap_ttl)
         else:
-            return self._post('/v1/auth/token/renew-self', json=params, wrap_ttl=wrap_ttl).json()
+            return self._post('/v1/auth/token/renew-self', json=params, wrap_ttl=wrap_ttl)
 
     def create_token_role(self, role,
                           allowed_policies=None, orphan=None, period=None,
@@ -621,7 +622,7 @@ class Client(object):
         GET /auth/<mount_point>/map/app-id/<app_id>
         """
         path = '/v1/auth/{0}/map/app-id/{1}'.format(mount_point, app_id)
-        return self._get(path, wrap_ttl=wrap_ttl).json()
+        return self._get(path, wrap_ttl=wrap_ttl)
 
     def delete_app_id(self, app_id, mount_point='app-id'):
         """
@@ -657,7 +658,7 @@ class Client(object):
         GET /auth/<mount_point>/map/user-id/<user_id>
         """
         path = '/v1/auth/{0}/map/user-id/{1}'.format(mount_point, user_id)
-        return self._get(path, wrap_ttl=wrap_ttl).json()
+        return self._get(path, wrap_ttl=wrap_ttl)
 
     def delete_user_id(self, user_id, mount_point='app-id'):
         """
@@ -682,7 +683,7 @@ class Client(object):
         """
         GET /auth/aws-ec2/config/client
         """
-        return self._get('/v1/auth/aws-ec2/config/client').json()
+        return self._get('/v1/auth/aws-ec2/config/client')
 
     def delete_vault_ec2_client_configuration(self):
         """
@@ -704,14 +705,14 @@ class Client(object):
         """
         GET /auth/aws-ec2/config/certificate/<cert_name>
         """
-        return self._get('/v1/auth/aws-ec2/config/certificate/{0}'.format(cert_name)).json()
+        return self._get('/v1/auth/aws-ec2/config/certificate/{0}'.format(cert_name))
 
     def list_vault_ec2_certificate_configurations(self):
         """
         GET /auth/aws-ec2/config/certificates?list=true
         """
         params = {'list': True}
-        return self._get('/v1/auth/aws-ec2/config/certificates', params=params).json()
+        return self._get('/v1/auth/aws-ec2/config/certificates', params=params)
 
     def create_ec2_role(self, role, bound_ami_id, role_tag=None, max_ttl=None, policies=None,
                           allow_instance_migration=False, disallow_reauthentication=False, **kwargs):
@@ -737,7 +738,7 @@ class Client(object):
         """
         GET /auth/aws-ec2/role/<role>
         """
-        return self._get('/v1/auth/aws-ec2/role/{0}'.format(role)).json()
+        return self._get('/v1/auth/aws-ec2/role/{0}'.format(role))
 
     def delete_ec2_role(self, role):
         """
@@ -750,7 +751,7 @@ class Client(object):
         GET /auth/aws-ec2/roles?list=true
         """
         try:
-            return self._get('/v1/auth/aws-ec2/roles', params={'list': True}).json()
+            return self._get('/v1/auth/aws-ec2/roles', params={'list': True})
         except exceptions.InvalidPath:
             return None
 
@@ -770,7 +771,7 @@ class Client(object):
             params['policies'] = policies
         if instance_id is not None:
             params['instance_id'] = instance_id
-        return self._post('/v1/auth/aws-ec2/role/{0}/tag'.format(role), json=params).json()
+        return self._post('/v1/auth/aws-ec2/role/{0}/tag'.format(role), json=params)
 
     def auth_ldap(self, username, password, mount_point='ldap', use_token=True, **kwargs):
         """
@@ -795,7 +796,7 @@ class Client(object):
         return self.auth('/v1/auth/{0}/login'.format(mount_point), json=params, use_token=use_token)
 
     def auth(self, url, use_token=True, **kwargs):
-        response = self._post(url, **kwargs).json()
+        response = self._post(url, **kwargs)
 
         if use_token:
             self.token = response['auth']['client_token']
@@ -806,7 +807,7 @@ class Client(object):
         """
         GET /sys/auth
         """
-        return self._get('/v1/sys/auth').json()
+        return self._get('/v1/sys/auth')
 
     def enable_auth_backend(self, backend_type, description=None, mount_point=None):
         """
@@ -840,7 +841,7 @@ class Client(object):
         GET /auth/approle/role
         """
 
-        return self._get('/v1/auth/approle/role?list=true').json()
+        return self._get('/v1/auth/approle/role?list=true')
 
     def get_role_id(self, role_name):
         """
@@ -848,7 +849,7 @@ class Client(object):
         """
 
         url = '/v1/auth/approle/role/{0}/role-id'.format(role_name)
-        return self._get(url).json()['data']['role_id']
+        return self._get(url)['data']['role_id']
 
     def set_role_id(self, role_name, role_id):
         """
@@ -866,7 +867,7 @@ class Client(object):
         """
         GET /auth/approle/role/<role name>
         """
-        return self._get('/v1/auth/approle/role/{0}'.format(role_name)).json()
+        return self._get('/v1/auth/approle/role/{0}'.format(role_name))
 
     def create_role_secret_id(self, role_name, meta=None):
         """
@@ -878,7 +879,7 @@ class Client(object):
         if meta is not None:
             params['metadata'] = json.dumps(meta)
 
-        return self._post(url, json=params).json()
+        return self._post(url, json=params)
 
     def get_role_secret_id(self, role_name, secret_id):
         """
@@ -888,21 +889,21 @@ class Client(object):
         params = {
             'secret_id': secret_id
         }
-        return self._post(url, json=params).json()
+        return self._post(url, json=params)
 
     def list_role_secrets(self, role_name):
         """
         GET /auth/approle/role/<role name>/secret-id?list=true
         """
         url = '/v1/auth/approle/role/{0}/secret-id?list=true'.format(role_name)
-        return self._get(url).json()
+        return self._get(url)
 
     def get_role_secret_id_accessor(self, role_name, secret_id_accessor):
         """
         GET /auth/approle/role/<role name>/secret-id-accessor/<secret_id_accessor>
         """
         url = '/v1/auth/approle/role/{0}/secret-id-accessor/{1}'.format(role_name, secret_id_accessor)
-        return self._get(url).json()
+        return self._get(url)
 
     def delete_role_secret_id(self, role_name, secret_id):
         """
@@ -931,7 +932,7 @@ class Client(object):
         }
         if meta is not None:
             params['meta'] = meta
-        return self._post(url, json=params).json()
+        return self._post(url, json=params)
 
     def auth_approle(self, role_id, secret_id=None, mount_point='approle', use_token=True):
         """
@@ -965,7 +966,7 @@ class Client(object):
 
     def __request(self, method, url, headers=None, **kwargs):
         url = urljoin(self._url, url)
-
+    
         if not headers:
             headers = {}
 
@@ -979,24 +980,57 @@ class Client(object):
         _kwargs = self._kwargs.copy()
         _kwargs.update(kwargs)
 
-        response = self.session.request(method, url, headers=headers,
-                                        allow_redirects=False, **_kwargs)
+        if _kwargs.get('params'):
+            url += '?' + urlencode(_kwargs.get('params'))
+
+        request_headers = ['{}:{}'.format(key, val) for key, val in headers.items()]
+        writer = ResponseIO()
+
+        self.session.setopt(pycurl.HTTPHEADER, request_headers)
+        self.session.setopt(pycurl.URL, url)
+        self.session.setopt(pycurl.WRITEFUNCTION, writer.write)
+        self.session.setopt(pycurl.CUSTOMREQUEST, method.upper())
+        if _kwargs.get('json'):
+            self.session.setopt(pycurl.POSTFIELDS, json.dumps(_kwargs.get('json')))
+        if _kwargs.get('timeout'):
+            self.session.setopt(pycurl.TIMEOUT, _kwargs.get('timeout'))
+
+        verify = _kwargs.get('verify')
+        if verify and isinstance(verify, bool):
+            # TODO ?
+            self.session.setopt(pycurl.SSL_VERIFYPEER, True)
+        elif verify:
+            self.session.setopt(pycurl.CAINFO, verify)
+        # TODO: cert verify?
+        self.session.setopt(pycurl.VERBOSE, True)
+        self.session.perform()
+      
+        resp_status = int(self.session.getinfo(pycurl.HTTP_CODE))
+        resp_text = writer.getvalue().decode()
+        self.session.reset()
+
+        resp_dict = None
+        try:
+            resp_dict = json.loads(resp_text)
+        except Exception as e:
+            pass
 
         # NOTE(ianunruh): workaround for https://github.com/ianunruh/hvac/issues/51
-        while response.is_redirect and self.allow_redirects:
-            url = urljoin(self._url, response.headers['Location'])
-            response = self.session.request(method, url, headers=headers,
-                                            allow_redirects=False, **_kwargs)
+        # TODO: support for pycurl
+        # while response.is_redirect and self.allow_redirects:
+        #     url = urljoin(self._url, response.headers['Location'])
+        #     response = self.session.request(method, url, headers=headers,
+        #                                     allow_redirects=False, **_kwargs)
 
-        if response.status_code >= 400 and response.status_code < 600:
+        if resp_status >= 400 and resp_status < 600:
             text = errors = None
-            if response.headers.get('Content-Type') == 'application/json':
-                errors = response.json().get('errors')
+            if resp_dict:
+                errors = resp_dict.get('errors')
             if errors is None:
-                text = response.text
-            self.__raise_error(response.status_code, text, errors=errors)
+                text = resp_text
+            self.__raise_error(resp_status, text, errors=errors)
 
-        return response
+        return resp_dict
 
     def __raise_error(self, status_code, message=None, errors=None):
         if status_code == 400:

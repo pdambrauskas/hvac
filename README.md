@@ -1,4 +1,6 @@
 # HVAC
+Fork of [hvac](https://github.com/ianunruh/hvac) with `requests` replaced by `pycurl`.
+Expermental. Some endopoints do not work
 
 [HashiCorp](https://hashicorp.com/) [Vault](https://www.vaultproject.io) API client for Python 2/3
 

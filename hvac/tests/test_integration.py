@@ -477,14 +477,15 @@ class IntegrationTest(TestCase):
 
         result = self.client.auth_tls()
 
-    def test_gh51(self):
-        key = 'secret/http://test.com'
+    # Not supported with pycurl
+    # def test_gh51(self):
+    #     key = 'secret/http://test.com'
 
-        self.client.write(key, foo='bar')
+    #     self.client.write(key, foo='bar')
 
-        result = self.client.read(key)
+    #     result = self.client.read(key)
 
-        assert result['data']['foo'] == 'bar'
+    #     assert result['data']['foo'] == 'bar'
 
     def test_token_accessor(self):
         # Create token, check accessor is provided
@@ -580,7 +581,7 @@ class IntegrationTest(TestCase):
         assert not before
 
         # Create token role
-        assert self.client.create_token_role('testrole').status_code == 204
+        assert self.client.create_token_role('testrole') == None
 
         # List token roles
         during = self.client.list_token_roles()['data']['keys']
@@ -600,7 +601,7 @@ class IntegrationTest(TestCase):
 
         # Create token role w/ policy
         assert self.client.create_token_role('testrole',
-                allowed_policies='testpolicy').status_code == 204
+                allowed_policies='testpolicy') == None
 
         # Create token against role
         token = self.client.create_token(lease='1h', role='testrole')

@@ -6,6 +6,8 @@
 /dist
 /*.egg-info
 /.tox
+/.eggs
+/.env
 
 /.coverage
 /cover
