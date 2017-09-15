@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 from setuptools import setup, find_packages
+# sudo apt-get install libssl-dev libcurl4-openssl-dev python-dev
 
 setup(
     name='hvac',
