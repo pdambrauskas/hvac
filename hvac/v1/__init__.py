@@ -1002,7 +1002,6 @@ class Client(object):
         elif verify:
             self.session.setopt(pycurl.CAINFO, verify)
         # TODO: cert verify?
-        self.session.setopt(pycurl.VERBOSE, True)
         self.session.perform()
       
         resp_status = int(self.session.getinfo(pycurl.HTTP_CODE))
